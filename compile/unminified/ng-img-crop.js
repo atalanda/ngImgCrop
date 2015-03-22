@@ -2,10 +2,10 @@
  * ngImgCrop v0.3.2
  * https://github.com/alexk111/ngImgCrop
  *
- * Copyright (c) 2014 Alex Kaul
+ * Copyright (c) 2015 Alex Kaul
  * License: MIT
  *
- * Generated at Wednesday, December 3rd, 2014, 3:54:12 PM
+ * Generated at Sunday, March 22nd, 2015, 3:40:15 PM
  */
 (function() {
 'use strict';
@@ -1411,6 +1411,8 @@ crop.factory('cropHost', ['$document', 'cropAreaCircle', 'cropAreaSquare', 'crop
     // Result Image quality
     var resImgQuality=null;
 
+    var areaCoordsRelativeInit=null;
+
     /* PRIVATE FUNCTIONS */
 
     // Draw Scene
@@ -1459,9 +1461,20 @@ crop.factory('cropHost', ['$document', 'cropAreaCircle', 'cropAreaSquare', 'crop
         }
         elCanvas.prop('width',canvasDims[0]).prop('height',canvasDims[1]).css({'margin-left': -canvasDims[0]/2+'px', 'margin-top': -canvasDims[1]/2+'px'});
 
-        theArea.setX(ctx.canvas.width/2);
-        theArea.setY(ctx.canvas.height/2);
-        theArea.setSize(Math.min(200, ctx.canvas.width/2, ctx.canvas.height/2));
+        if(areaCoordsRelativeInit==null) {
+          theArea.setX(ctx.canvas.width/2);
+          theArea.setY(ctx.canvas.height/2);
+          theArea.setSize(Math.min(200, ctx.canvas.width/2, ctx.canvas.height/2));
+        } else {
+          if(typeof areaCoordsRelativeInit.size===undefined || areaCoordsRelativeInit.x===undefined || areaCoordsRelativeInit.y===undefined) {
+            areaCoordsRelativeInit.x = ctx.canvas.width/2;
+            areaCoordsRelativeInit.y = ctx.canvas.height/2;
+            areaCoordsRelativeInit.size = Math.min(200, ctx.canvas.width/2, ctx.canvas.height/2);
+          }
+          theArea.setX(areaCoordsRelativeInit.x);
+          theArea.setY(areaCoordsRelativeInit.y);
+          theArea.setSize(areaCoordsRelativeInit.size);
+        }
       } else {
         elCanvas.prop('width',0).prop('height',0).css({'margin-top': 0});
       }
@@ -1687,6 +1700,7 @@ crop.factory('cropHost', ['$document', 'cropAreaCircle', 'cropAreaSquare', 'crop
       }
       theArea = new AreaClass(ctx, events);
       theArea.setMinSize(curMinSize);
+
       theArea.setSize(curSize);
       theArea.setX(curX);
       theArea.setY(curY);
@@ -1697,6 +1711,23 @@ crop.factory('cropHost', ['$document', 'cropAreaCircle', 'cropAreaSquare', 'crop
       }
 
       drawScene();
+    };
+
+    this.getArea = function() {
+      return theArea;
+    };
+
+    this.setAreaCoordsFromRelative = function(areaCoordsRelative) {
+      if(areaCoordsRelative &&
+          typeof areaCoordsRelative.x==='number' && !isNaN(areaCoordsRelative.x) &&
+          typeof areaCoordsRelative.y==='number' && !isNaN(areaCoordsRelative.y) &&
+          typeof areaCoordsRelative.size==='number' &&  !isNaN(areaCoordsRelative.size)) {
+        areaCoordsRelativeInit = areaCoordsRelative;
+        theArea.setSize(areaCoordsRelativeInit.size);
+        theArea.setX(areaCoordsRelativeInit.x + areaCoordsRelativeInit.size/2);
+        theArea.setY(areaCoordsRelativeInit.y + areaCoordsRelativeInit.size/2);
+        drawScene();
+      }
     };
 
     /* Life Cycle begins */
@@ -1770,6 +1801,8 @@ crop.directive('imgCrop', ['$timeout', 'cropHost', 'cropPubSub', function($timeo
       resultImageSize: '=',
       resultImageFormat: '@',
       resultImageQuality: '=',
+      areaCoords: '=',
+      areaCoordsAbsoluteInit: '=',
 
       onChange: '&',
       onLoadBegin: '&',
@@ -1783,6 +1816,10 @@ crop.directive('imgCrop', ['$timeout', 'cropHost', 'cropPubSub', function($timeo
     link: function(scope, element/*, attrs*/) {
       // Init Events Manager
       var events = scope.events;
+
+      if(!scope.areaCoords) {
+        scope.areaCoords = {};
+      }
 
       // Init Crop Host
       var cropHost=new CropHost(element.find('canvas'), {}, events);
@@ -1799,6 +1836,43 @@ crop.directive('imgCrop', ['$timeout', 'cropHost', 'cropPubSub', function($timeo
           }
           scope.onChange({$dataURI: scope.resultImage});
         }
+        updateAreaCoords(scope);
+      };
+
+      var updateAreaCoords = function(scope) {
+        var area = cropHost.getArea();
+        var relativeSize = area._size;
+        var relativeX = area._x - relativeSize/2;
+        var relativeY = area._y - relativeSize/2;
+        var absoluteWidth = area._image.width;
+        var absoluteHeight = area._image.height;
+
+        var relativeWidth = area._ctx.canvas.width;
+        var relativeHeight = area._ctx.canvas.height;
+        var scaleFactor = absoluteWidth / relativeWidth;
+        var absoluteX = relativeX * scaleFactor;
+        var absoluteY = relativeY * scaleFactor;
+        var absoluteSize = relativeSize * scaleFactor;
+        scope.areaCoords = {
+          relative: {
+            x: relativeX,
+            y: relativeY,
+            size: relativeSize,
+            image: {
+              width: relativeWidth,
+              height: relativeHeight
+            }
+          },
+          absolute: {
+            x: absoluteX,
+            y: absoluteY,
+            size: absoluteSize,
+            image: {
+              width: absoluteWidth,
+              height: absoluteHeight
+            }
+          }
+        };
       };
 
       // Wrapper to safely exec functions within $apply on a running $digest cycle
@@ -1857,6 +1931,28 @@ crop.directive('imgCrop', ['$timeout', 'cropHost', 'cropPubSub', function($timeo
         updateResultImage(scope);
       });
 
+      var updateRelativeCoords = function () {
+        var relativeAreaCoords = convertAbsoluteToRelativeCoords(scope.areaCoordsAbsoluteInit);
+        cropHost.setAreaCoordsFromRelative(relativeAreaCoords);
+        updateResultImage(scope);
+      };
+      scope.$watch('areaCoordsAbsoluteInit', updateRelativeCoords, true);
+      scope.$watch(function () {
+        return cropHost.getArea()._image.width;
+      }, updateRelativeCoords);
+
+      var convertAbsoluteToRelativeCoords = function(absCoords) {
+        var area = cropHost.getArea();
+        var absoluteWidth = area._image.width;
+        var relativeWidth = area._ctx.canvas.width;
+        var scaleFactor = absoluteWidth / relativeWidth;
+        return {
+          x: absCoords.x / scaleFactor,
+          y: absCoords.y / scaleFactor,
+          size: absCoords.size / scaleFactor
+        }
+      };
+
       // Update CropHost dimensions when the directive element is resized
       scope.$watch(
         function () {
@@ -1876,4 +1972,5 @@ crop.directive('imgCrop', ['$timeout', 'cropHost', 'cropPubSub', function($timeo
     }
   };
 }]);
+
 }());

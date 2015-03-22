@@ -43,6 +43,8 @@ crop.factory('cropHost', ['$document', 'cropAreaCircle', 'cropAreaSquare', 'crop
     // Result Image quality
     var resImgQuality=null;
 
+    var areaCoordsRelativeInit=null;
+
     /* PRIVATE FUNCTIONS */
 
     // Draw Scene
@@ -91,9 +93,20 @@ crop.factory('cropHost', ['$document', 'cropAreaCircle', 'cropAreaSquare', 'crop
         }
         elCanvas.prop('width',canvasDims[0]).prop('height',canvasDims[1]).css({'margin-left': -canvasDims[0]/2+'px', 'margin-top': -canvasDims[1]/2+'px'});
 
-        theArea.setX(ctx.canvas.width/2);
-        theArea.setY(ctx.canvas.height/2);
-        theArea.setSize(Math.min(200, ctx.canvas.width/2, ctx.canvas.height/2));
+        if(areaCoordsRelativeInit==null) {
+          theArea.setX(ctx.canvas.width/2);
+          theArea.setY(ctx.canvas.height/2);
+          theArea.setSize(Math.min(200, ctx.canvas.width/2, ctx.canvas.height/2));
+        } else {
+          if(typeof areaCoordsRelativeInit.size===undefined || areaCoordsRelativeInit.x===undefined || areaCoordsRelativeInit.y===undefined) {
+            areaCoordsRelativeInit.x = ctx.canvas.width/2;
+            areaCoordsRelativeInit.y = ctx.canvas.height/2;
+            areaCoordsRelativeInit.size = Math.min(200, ctx.canvas.width/2, ctx.canvas.height/2);
+          }
+          theArea.setX(areaCoordsRelativeInit.x);
+          theArea.setY(areaCoordsRelativeInit.y);
+          theArea.setSize(areaCoordsRelativeInit.size);
+        }
       } else {
         elCanvas.prop('width',0).prop('height',0).css({'margin-top': 0});
       }
@@ -320,6 +333,7 @@ crop.factory('cropHost', ['$document', 'cropAreaCircle', 'cropAreaSquare', 'crop
       }
       theArea = new AreaClass(ctx, events);
       theArea.setMinSize(curMinSize);
+
       theArea.setSize(curSize);
       theArea.setX(curX);
       theArea.setY(curY);
@@ -330,6 +344,23 @@ crop.factory('cropHost', ['$document', 'cropAreaCircle', 'cropAreaSquare', 'crop
       }
 
       drawScene();
+    };
+
+    this.getArea = function() {
+      return theArea;
+    };
+
+    this.setAreaCoordsFromRelative = function(areaCoordsRelative) {
+      if(areaCoordsRelative &&
+          typeof areaCoordsRelative.x==='number' && !isNaN(areaCoordsRelative.x) &&
+          typeof areaCoordsRelative.y==='number' && !isNaN(areaCoordsRelative.y) &&
+          typeof areaCoordsRelative.size==='number' &&  !isNaN(areaCoordsRelative.size)) {
+        areaCoordsRelativeInit = areaCoordsRelative;
+        theArea.setSize(areaCoordsRelativeInit.size);
+        theArea.setX(areaCoordsRelativeInit.x + areaCoordsRelativeInit.size/2);
+        theArea.setY(areaCoordsRelativeInit.y + areaCoordsRelativeInit.size/2);
+        drawScene();
+      }
     };
 
     /* Life Cycle begins */
